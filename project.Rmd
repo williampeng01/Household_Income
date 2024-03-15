@@ -1,0 +1,168 @@
+---
+title: "Household Income Analysis"
+author: "William Peng"
+date: "2023-03-24"
+output: html_document
+---
+
+### Introduction\
+The study analyzes a dataset of 753 observations of households. My hypothesis is that education and children are the biggest factors that influence family income(FAMINC). Family income is derived from (WHRS* WW+HHRS*HW). I consider those 4 variables as direct contributors to the final outcome variable FAMINC and decide not to use them.I made 2 regression tables for 2 subsets: one for wife not engaging in labor and one for wife engaging in labor. This allows me to compare the differences as the two groups are structurally different. \
+```{r setup, include=FALSE}
+  
+# Clear environment
+  rm(list = ls())
+
+# Your library commands go here
+  library(tidyverse)
+  library(foreign)
+  library(car)
+  library(tidyverse)
+  library(readstata13)
+  library(sandwich)
+  library(stargazer)
+  library(WDI)
+  library(haven)
+  library(ggplot2)
+
+# Set Working Directory
+  setwd("~/Household_Income")
+  
+# turn off scientific notation except for big numbers
+  options(scipen = 9)
+
+# function to calculate corrected SEs for regression 
+  cse = function(reg) {
+   rob = sqrt(diag(vcovHC(reg, type = "HC1")))
+   return(rob)
+  }
+```
+***
+```{r data, echo=FALSE, comment=NA, message=FALSE, warning=FALSE}
+#Read Data
+df <- read.csv("http://www.stern.nyu.edu/~wgreene/Text/Edition7/TableF5-1.csv")
+#Rename LFP to labor_force_part
+df <- df %>% rename(labor_force_part=LFP)
+```
+### Visualizations
+We first look at a descriptive statistics of each attribute\
+```{r table1, echo=FALSE, comment=NA, message=FALSE, warning=FALSE}
+#Descriptive Statistics of Dataset
+stargazer(df, type="text", median=TRUE, 
+          digits=2, title="Household Statistics")
+```
+
+To look at the distribution of family, I created a histogram
+
+```{r plot1, echo=FALSE, comment=NA, message=FALSE, warning=FALSE}
+ggplot(data=df, aes(x=FAMINC)) +
+  geom_histogram()+
+  labs(x="Family Income",title="Family Income Distribution")
+```
+
+The distribution of income is shaped like a bell curve skewed to the right\
+
+***
+
+In the second graph, I use labor_force_part as the control variable to test the difference of family income between two groups: families in which the wife works and families in which the wife doesn't work. A box plot is used to visualize the discrete x variable labor_force_participation and continuous y variable FAMINC\
+
+```{r plot2, echo=FALSE, comment=NA, message=FALSE, warning=FALSE}
+ggplot(data=df, aes(x=factor(labor_force_part), y=FAMINC)) +
+  geom_boxplot()+
+  labs(x="Wife's Labor Participation", y = "Family Income", 
+       title="Family income if wife works VS. wife doesn't work") 
+```
+
+While the first quantile, medium, and third quantile are all higher if wife participates in work, the differences in the groups aren't as big as I imagined.\
+
+***
+
+To visualize how children can impact family income, I used a box plot with x-axis being number of kids below 6 years old and y-axis being family income as the third plot.
+
+```{r plot3, echo=FALSE, comment=NA, message=FALSE, warning=FALSE}
+ggplot(data=df, aes(x=factor(KL6), y=FAMINC)) +
+  geom_boxplot()+
+  labs(x="Number of kids below 6 years old", y = "Family Income", 
+       title="Kids below 6 years old on Family Income") 
+```
+
+For plot 3, I noticed that the first quantile, medium, and third quantile decrease from 0 to 2 kids below 6. However, the box on family income substantially increases when there are 3 kids below.\
+
+***
+Plot 4 is a box plot that has Kids between 6 and 18 on Family Income as the x-axis and family income as the y-axis.
+
+```{r plot4, echo=FALSE, comment=NA, message=FALSE, warning=FALSE}
+ggplot(data=df, aes(x=factor(K618), y=FAMINC)) +
+  geom_boxplot()+
+  labs(x="Number of kids between 6 years old and 18 years old", y = "Family Income", 
+       title="Kids between 6 and 18 on Family Income") 
+```
+
+While for number of kids between 6 and 18 are 0~5, the boxes are approximately the same. However, there isn't enough data for 6,7, and 8 kids between 6 and 18 to form a clear visualization on those points using box plots. 
+
+***
+To visualize the effect of education on family income, I first made a boxplot of wife's education level on family income for plot 5
+
+```{r plot5, echo=FALSE, comment=NA, message=FALSE, warning=FALSE}
+ggplot(data=df, aes(x=factor(WE), y=FAMINC)) +
+  geom_boxplot()+
+  labs(x="Wife Education Level in Years", y = "Family Income", 
+       title="Wife's Education on Family Income") 
+```
+
+I observed that an increase in wife's education is associated with an increase in family income.
+
+***
+For plot 6, I made a boxplot of husband's education level on family income
+```{r plot6, echo=FALSE, comment=NA, message=FALSE, warning=FALSE}
+ggplot(data=df, aes(x=factor(HE), y=FAMINC)) +
+  geom_boxplot()+
+  labs(x="Husband Education Level in Years", y = "Family Income", 
+       title="Husband Education on Family Income") 
+```
+I observed that an increase in husband's education is also associated with an increase in family income.However, there is an excpetion when x = 3, the data is insufficient to form and box. On x = 5, the box is exceptionally high, which breaks the tendency of higher education levels being associated with higher family income
+
+***
+### Regressions
+In the first table, we use the subset of the dataset in which wife doesn't participate in labor. The log of Family income is the outcome variable. A log-linear regression is used because it addresses the skewed distribution of family income. The number or children(KL6, K618), husband's education(HE), unemployment rate(UN), and the dummy variable if family resides in a large city(CIT) are the explanatory variables of the regressions.
+```{r regression1, echo=FALSE, comment=NA, message=FALSE, warning=FALSE}
+reg1 = lm(data=subset(df, labor_force_part==0),log(FAMINC)~KL6+K618)
+reg2 = lm(data=subset(df, labor_force_part==0),log(FAMINC)~KL6+K618+HE)
+reg3 = lm(data=subset(df, labor_force_part==0),log(FAMINC)~KL6+K618+HE+UN)
+reg4 = lm(data=subset(df, labor_force_part==0),log(FAMINC)~KL6+K618+HE+UN+CIT)
+
+stargazer(reg1, reg2, reg3,reg4,
+          se=list(cse(reg1),cse(reg2),cse(reg3),cse(reg4)), 
+          title="Log-linear Multivariable Linear Regression with labor_force_part=0", type="text", 
+          df=FALSE, digits=4)
+```
+In regression 1, one more kid below 6 years old in the family will increase family income by 0.82%. One more kid between 6 and 18 years old in the family will decrease family income by 0.79%. To my surprise, those 2 variables are not only small in magnitude but also not statistically significant at any observed level. The goodness of fit indicator R2 is 0.0004, showing us that the regression has little to non predictive power.\
+
+In regression 2, a year increase husband education will increase family income by 8.71%. Testing the null hypothesis that a 0 in husband education doesn't matter, we divide 0.0871 by the standard error of estimate 0.0094. This yields a t-stat of 9.266. We reject the null hypothesis and conclude that husband education is statistically significant at 1% level as shown on the table. Husband's education does make a difference as both KL6 and K618 decrease, showing there was a upward bias in regression 1 before adding the omitted variable HE. The goodness of fit indicator R2 has now grown to 0.2183, once again proving that husband education is important in predicting family income.\
+
+In regression 3, a percentage point increase in unemployment rate increases family income by 0.53%. UN is not significant at any observed level. The regression didn't suffer omitted variable bias because of UN as the values of K16, K618, and HE didn't change much.\
+
+In regression 4, families living in large cities have 19.13% more family income than families living outside of large cities. Testing the null hypothesis that not living int the city doesn't matter, we divide 0.1913 by the standard error of estimated coefficient 0.0606, which yields of t-stat 3.157. We can reject the null hypothesis and conclude that city is a statistically significant 1% level as shown on the table. The final goodness of fit indicator R2 is 0.2443, which is not too high. The F-statistic of this regression is 20.6219, which allows us to reject the joint hypothesis test.\
+
+A possible threat to internal validity is concerned with unemployment rate. In the dataset, all husband have wages, which means they are not unemployed. Using unemployment rate creates a sample selection bias because the dataset doesn't include people that are affected by unemployment rates. Another possible threat is omitted variable bias. For instance, the husband age can be an omitted variable. If husband's age is higher, the husband may get higher-paying jobs due to having more work experience, which leads to higher family income.
+
+***
+The second table of regression, which is a subset that has working wives, includes an interaction term wife's education and years of wife's previous experiences. 
+
+```{r regression2, echo=FALSE, comment=NA, message=FALSE, warning=FALSE}
+reg5 = lm(data=subset(df, labor_force_part==1),log(FAMINC)~KL6+K618+HE+WE+CIT)
+reg6 = lm(data=subset(df, labor_force_part==1),log(FAMINC)~KL6+K618+HE+WE+CIT+AX+WE*AX)
+
+stargazer(reg5, reg6,
+          se=list(cse(reg5),cse(reg6)), 
+          title="Log-linear  Multivariable Linear Regression with labor_force_part=1 including Interaction Term", type="text", 
+          df=FALSE, digits=4)
+```
+In regression 1, while K618 remains insignificant, KL6 is now significant at 1% level. A increase in one kid below six decreases income by 17.11%. A year increase in husband's education increases family income by 3.64%. A year increase in wife's education increases family income by 3.78%. Families living in large cities have 21.13% more family income than families living outside of large cities. All three variables reject the null hypothesis, as they are significant at 1% level.\
+
+In regression 2, the addition of wife's previous experience and the interaction term between it and wife's education doesn't have any significance. This means there is no moderator for the two variables.\
+
+For both regressions, the R2 is 0.23, and the F-stats allows them to reject the Joint hypothesis test. The regressions suffer an omitted variables bias. Further studies have to look into the correlation of any variable representing wives behavior and the number of kids below 6, such as wife's involvement in baby care. 
+
+In conclusion, the education of wife and husband are significant for family income. However, the number of children doesn't really matter much except when wives are working and there are kids below 6. Residing in large city is an important variable that has a positive correlation with family income. The reason may be that jobs opportunities in large cities offer higher salary.
+
+(word count: 1193)
